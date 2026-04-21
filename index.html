@@ -828,32 +828,45 @@ const observer = new IntersectionObserver(entries => {
 }, { threshold: 0.12 });
 document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 
-// ── SVG ARROW HELPERS ─────────────────────────────────
+// ── SVG HELPERS ───────────────────────────────────────
+// SVG elements return SVGAnimatedString for .className — must use getAttribute/setAttribute
+function svgCls(id, cls) {
+  const el = document.getElementById(id);
+  if (el) el.setAttribute('class', cls);
+}
 function showArrow(id) {
-  const line = document.getElementById(id);
-  const head = document.getElementById(id + '-h');
-  const label = document.getElementById(id + '-l');
-  if (line) line.classList.add('show');
-  if (head) head.classList.add('show');
-  if (label) label.classList.add('show');
+  [id, id+'-h', id+'-l'].forEach(sid => {
+    const el = document.getElementById(sid);
+    if (!el) return;
+    const c = el.getAttribute('class') || '';
+    if (!c.includes('show')) el.setAttribute('class', c + ' show');
+  });
 }
 function hideArrow(id) {
-  const line = document.getElementById(id);
-  const head = document.getElementById(id + '-h');
-  const label = document.getElementById(id + '-l');
-  if (line) line.classList.remove('show');
-  if (head) head.classList.remove('show');
-  if (label) label.classList.remove('show');
+  [id, id+'-h', id+'-l'].forEach(sid => {
+    const el = document.getElementById(sid);
+    if (!el) return;
+    el.setAttribute('class', (el.getAttribute('class') || '').replace(/\bshow\b/g, '').trim());
+  });
 }
 function setText(id, val, cls) {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = val;
-  el.className = el.className.replace(/\b(ok|err)\b/g, '').trim();
-  if (cls) el.classList.add(cls);
+  const base = (el.getAttribute('class') || '').replace(/\b(ok|err)\b/g, '').trim();
+  el.setAttribute('class', cls ? base + ' ' + cls : base);
 }
-function showEl(id) { const e = document.getElementById(id); if(e) e.classList.add('show'); }
-function hideEl(id) { const e = document.getElementById(id); if(e) e.classList.remove('show'); }
+function showEl(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const c = el.getAttribute('class') || '';
+  if (!c.includes('show')) el.setAttribute('class', c + ' show');
+}
+function hideEl(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.setAttribute('class', (el.getAttribute('class') || '').replace(/\bshow\b/g, '').trim());
+}
 function setMsg(id, msg, cls) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -880,9 +893,9 @@ function resetBroken() {
   setText('sa-val','—'); setText('sa-calc','—');
   setText('sb-val','—'); setText('sb-calc','—');
   setText('redis-broken-val','100');
-  document.getElementById('redis-broken').className = 'redis-body';
-  document.getElementById('sa-box').className = 'srv-box';
-  document.getElementById('sb-box').className = 'srv-box';
+  svgCls('redis-broken','redis-body');
+  svgCls('sa-box','srv-box');
+  svgCls('sb-box','srv-box');
   setMsg('msg-broken','Press Play to animate the race condition');
 }
 
@@ -907,8 +920,8 @@ function animateBroken() {
   t(1400, () => {
     setText('sa-calc','100 − 10 = 90');
     setText('sb-calc','100 − 10 = 90');
-    document.getElementById('sa-box').className = 'srv-box active';
-    document.getElementById('sb-box').className = 'srv-box active';
+    svgCls('sa-box','srv-box active');
+    svgCls('sb-box','srv-box active');
   });
   t(2200, () => {
     setMsg('msg-broken','Server A writes back…');
@@ -916,7 +929,7 @@ function animateBroken() {
   });
   t(2800, () => {
     setText('redis-broken-val','90');
-    document.getElementById('redis-broken').className = 'redis-body ok';
+    svgCls('redis-broken','redis-body ok');
   });
   t(3200, () => {
     setMsg('msg-broken', 'Server B writes back — OVERWRITING Server A\'s update!', 'bad');
@@ -924,9 +937,9 @@ function animateBroken() {
   });
   t(3800, () => {
     setText('redis-broken-val','90','err');
-    document.getElementById('redis-broken').className = 'redis-body err';
-    document.getElementById('sa-box').className = 'srv-box err';
-    document.getElementById('sb-box').className = 'srv-box err';
+    svgCls('redis-broken','redis-body err');
+    svgCls('sa-box','srv-box err');
+    svgCls('sb-box','srv-box err');
     showEl('b-err');
     setMsg('msg-broken','Expected 80. Got 90. 10 units double-spent.', 'bad');
   });
@@ -938,9 +951,9 @@ function resetMutex() {
   ['m-sep-a','m-sep-b','m-proc-a','m-proc-b','m-err','ma-iso','mb-iso'].forEach(hideEl);
   setText('ma-val','—'); setText('mb-val','—');
   setText('redis-mutex-val','100');
-  document.getElementById('redis-mutex').className = 'redis-body';
-  document.getElementById('ma-box').className = 'srv-box';
-  document.getElementById('mb-box').className = 'srv-box';
+  svgCls('redis-mutex','redis-body');
+  svgCls('ma-box','srv-box');
+  svgCls('mb-box','srv-box');
   setMsg('msg-mutex','Press Play to see why mutexes fail across processes');
 }
 
@@ -948,8 +961,8 @@ function animateMutex() {
   const t = (ms, fn) => diagTimers['mutex'].push(setTimeout(fn, ms));
   setMsg('msg-mutex','Each server acquires its own private mutex…');
   t(300, () => {
-    document.getElementById('ma-box').className = 'srv-box active';
-    document.getElementById('mb-box').className = 'srv-box active';
+    svgCls('ma-box','srv-box active');
+    svgCls('mb-box','srv-box active');
     showEl('ma-iso'); showEl('mb-iso');
     showEl('m-sep-a'); showEl('m-sep-b');
     showEl('m-proc-a'); showEl('m-proc-b');
@@ -972,9 +985,9 @@ function animateMutex() {
   });
   t(3800, () => {
     setText('redis-mutex-val','90','err');
-    document.getElementById('redis-mutex').className = 'redis-body err';
-    document.getElementById('ma-box').className = 'srv-box err';
-    document.getElementById('mb-box').className = 'srv-box err';
+    svgCls('redis-mutex','redis-body err');
+    svgCls('ma-box','srv-box err');
+    svgCls('mb-box','srv-box err');
     showEl('m-err');
     setMsg('msg-mutex','Mutex = thread-safe corruption. Same result as the broken version.', 'bad');
   });
@@ -986,8 +999,8 @@ function resetDecrby() {
   hideEl('d-ok');
   setText('da-res','—'); setText('db-res','—');
   setText('redis-decrby-val','100');
-  document.getElementById('da-box').className = 'srv-box';
-  document.getElementById('db-box').className = 'srv-box';
+  svgCls('da-box','srv-box');
+  svgCls('db-box','srv-box');
   setMsg('msg-decrby','Press Play to see atomic DECRBY in action');
 }
 
@@ -995,7 +1008,7 @@ function animateDecrby() {
   const t = (ms, fn) => diagTimers['decrby'].push(setTimeout(fn, ms));
   setMsg('msg-decrby','Server A sends DECRBY — one atomic instruction…');
   t(300, () => {
-    document.getElementById('da-box').className = 'srv-box ok';
+    svgCls('da-box','srv-box ok');
     showArrow('d-a2r');
   });
   t(900, () => {
@@ -1004,7 +1017,7 @@ function animateDecrby() {
     setMsg('msg-decrby','Redis processed atomically. No gap. Server B now sends its DECRBY…');
   });
   t(1600, () => {
-    document.getElementById('db-box').className = 'srv-box ok';
+    svgCls('db-box','srv-box ok');
     showArrow('d-b2r');
   });
   t(2200, () => {
@@ -1022,9 +1035,9 @@ function resetLua() {
   setText('la-res','—'); setText('lb-res','—');
   setText('redis-lua-val','500');
   setText('lua-check','—');
-  document.getElementById('la-box').className = 'srv-box';
-  document.getElementById('lb-box').className = 'srv-box';
-  document.getElementById('redis-lua-body').className = 'redis-body ok';
+  svgCls('la-box','srv-box');
+  svgCls('lb-box','srv-box');
+  svgCls('redis-lua-body','redis-body ok');
   setMsg('msg-lua','Press Play to see Lua script execution inside Redis');
 }
 
@@ -1032,7 +1045,7 @@ function animateLua() {
   const t = (ms, fn) => diagTimers['lua'].push(setTimeout(fn, ms));
   setMsg('msg-lua','Server A sends EVAL — Lua runs entirely inside Redis…');
   t(300, () => {
-    document.getElementById('la-box').className = 'srv-box ok';
+    svgCls('la-box','srv-box ok');
     showArrow('l-a2r');
   });
   t(900, () => {
@@ -1046,13 +1059,13 @@ function animateLua() {
     setText('lua-check','checking balance…');
   });
   t(2200, () => {
-    document.getElementById('lb-box').className = 'srv-box err';
+    svgCls('lb-box','srv-box err');
     showArrow('l-b2r');
   });
   t(2800, () => {
     setText('lua-check','0 < 10 ✗ INSUFFICIENT');
     setText('lb-res','← ERR: INSUFFICIENT_FUNDS','err');
-    document.getElementById('redis-lua-body').className = 'redis-body ok';
+    svgCls('redis-lua-body','redis-body ok');
     showEl('l-ok');
     setMsg('msg-lua','Balance stays 0. No overdraft. Atomic check prevented it.', 'good');
   });
