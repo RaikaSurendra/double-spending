@@ -50,6 +50,10 @@ h1 em{font-style:normal;color:var(--red)}
 .hero-scroll{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--t3);font-size:12px;letter-spacing:.08em}
 .scroll-line{width:1px;height:48px;background:linear-gradient(to bottom,transparent,var(--t3));animation:scrollline 2s ease-in-out infinite}
 
+/* HERO transitions */
+.hero-badge,.hero-sub,h1.glitch,#db-emoji{transition:opacity .25s ease,transform .25s ease}
+.switching{opacity:0;transform:translateY(-4px)}
+
 /* SECTIONS */
 section{padding:100px 24px;max-width:1100px;margin:0 auto}
 .section-label{font-family:var(--fm);font-size:11px;letter-spacing:.14em;color:var(--blue);text-transform:uppercase;margin-bottom:16px}
@@ -104,7 +108,33 @@ h2{font-family:var(--fd);font-size:clamp(28px,4vw,48px);font-weight:800;line-hei
 .inner-tag{font-family:'JetBrains Mono',monospace;font-size:10px;text-anchor:middle;opacity:0;transition:opacity .3s}
 .inner-tag.show{opacity:1}
 
+  /* POSTGRES diagram elements */
+  .pg-top{fill:#0a1424;stroke:var(--blue);stroke-width:1.5}
+  .pg-body{fill:#09101e;stroke:var(--blue);stroke-width:1.5}
+  .pg-body.err{fill:#1a0f12;stroke:var(--red);filter:drop-shadow(0 0 10px var(--red-g))}
+  .pg-body.ok{fill:#0a1812;stroke:var(--green);filter:drop-shadow(0 0 10px var(--green-g))}
+  .pg-title{fill:var(--blue);font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-anchor:middle}
+  .pg-val{fill:var(--t1);font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;text-anchor:middle}
+  .pg-val.err{fill:var(--red)}
+  .pg-val.ok{fill:var(--green)}
+
+  /* Backend toggle */
+  .backend-toggle{display:flex;gap:8px;align-items:center}
+  .backend-toggle .bt{background:transparent;border:1px solid var(--border-b);color:var(--t2);border-radius:16px;padding:6px 12px;font-size:12px;font-family:var(--fm);cursor:pointer}
+  .backend-toggle .bt.active{border-color:var(--blue);color:var(--blue);background:var(--blue-d)}
+
+  /* Backend visibility */
+  .redis-only{display:block}
+  .pg-only{display:none}
+  body.backend-postgres .redis-only{display:none}
+  body.backend-postgres .pg-only{display:block}
+  body.backend-redis .redis-only{display:block}
+  body.backend-redis .pg-only{display:none}
+
 /* PILLS / CALLOUT */
+.db-icon{margin-left:8px;font-size:22px;vertical-align:middle}
+.db-icon.pg{color:var(--blue)}
+.db-icon.redis{color:var(--redis)}
 .callout{display:flex;gap:16px;padding:20px 24px;border-radius:12px;margin:32px 0;background:var(--red-d);border:1px solid rgba(255,71,87,.25)}
 .callout.info{background:var(--blue-d);border-color:rgba(79,158,255,.25)}
 .callout.ok{background:var(--green-d);border-color:rgba(0,214,143,.25)}
@@ -194,6 +224,10 @@ footer a{color:var(--blue);text-decoration:none}
     <li><a href="#principles">Principles</a></li>
     <li><a href="#code">Code</a></li>
   </ul>
+  <div class="backend-toggle" id="backend-toggle">
+    <button class="bt active" data-backend="redis">Redis</button>
+    <button class="bt" data-backend="postgres">Postgres</button>
+  </div>
 </nav>
 
 <!-- HERO -->
@@ -201,7 +235,7 @@ footer a{color:var(--blue);text-decoration:none}
   <canvas id="hero-canvas"></canvas>
   <div class="hero-content">
     <div class="hero-badge"><span></span>DISTRIBUTED SYSTEMS · REDIS · RACE CONDITIONS</div>
-    <h1 class="glitch">THE <em>DOUBLE-SPENDING</em> PROBLEM</h1>
+    <h1 class="glitch">THE <em>DOUBLE-SPENDING</em> PROBLEM <span id="db-emoji" class="db-icon redis">🟥</span></h1>
     <p class="hero-sub">Two servers. One Redis. A race condition that silently corrupts your balances — and why a Mutex won't save you.</p>
     <div class="hero-cta">
       <a href="#problem" class="btn btn-primary">Explore the Problem →</a>
@@ -212,7 +246,7 @@ footer a{color:var(--blue);text-decoration:none}
 </div>
 
 <!-- THE PROBLEM -->
-<section id="problem">
+<section id="problem" class="redis-only">
   <div class="reveal">
     <div class="section-label">01 · The Problem</div>
     <h2>A race condition you can't see — until the money is gone</h2>
@@ -315,8 +349,376 @@ footer a{color:var(--blue);text-decoration:none}
 
 <hr class="sep">
 
+<!-- PG 01 · The Problem (SQL) -->
+<section id="pg-problem" class="pg-only">
+  <div class="reveal">
+    <div class="section-label">01 · The Problem (Postgres)</div>
+    <h2>Non-atomic SELECT → UPDATE causes the same race</h2>
+    <p class="section-desc">Two transactions read the same balance, compute locally, and then overwrite each other. Money vanishes just like in Redis.</p>
+  </div>
+
+  <div class="reveal reveal-delay-1 diagram-wrap">
+    <div class="diagram-header">
+      <span class="diagram-title">postgres/cmd/broken/main.go · non-atomic SELECT → compute → UPDATE</span>
+      <span class="diagram-status err" id="status-pg-broken">RACE CONDITION</span>
+    </div>
+    <div class="diagram-body">
+      <svg class="diag-svg" viewBox="0 0 860 240" id="svg-pg-broken">
+        <!-- Server A -->
+        <rect class="srv-box" id="pgb-sa-box" x="10" y="60" width="180" height="120" rx="10"/>
+        <text class="srv-title" x="100" y="90">Server A</text>
+        <text class="srv-label" x="100" y="110">balance read:</text>
+        <text class="srv-val" id="pgb-sa-val" x="100" y="132">—</text>
+        <text class="srv-label" x="100" y="155">computes:</text>
+        <text class="srv-val" id="pgb-sa-calc" x="100" y="172">—</text>
+
+        <!-- Postgres -->
+        <ellipse class="pg-top" cx="430" cy="82" rx="60" ry="16"/>
+        <rect class="pg-body" id="pgb-db" x="370" y="82" width="120" height="90" rx="0"/>
+        <ellipse style="fill:#0a1424;stroke:var(--blue);stroke-width:1.5" cx="430" y="172" rx="60" ry="16"/>
+        <text class="pg-title" x="430" y="107">POSTGRES</text>
+        <text class="pg-val" id="pgb-db-val" x="430" y="138">100</text>
+        <text class="srv-label" id="pgb-db-sub" x="430" y="158">balance</text>
+
+        <!-- Server B -->
+        <rect class="srv-box" id="pgb-sb-box" x="670" y="60" width="180" height="120" rx="10"/>
+        <text class="srv-title" x="760" y="90">Server B</text>
+        <text class="srv-label" x="760" y="110">balance read:</text>
+        <text class="srv-val" id="pgb-sb-val" x="760" y="132">—</text>
+        <text class="srv-label" x="760" y="155">computes:</text>
+        <text class="srv-val" id="pgb-sb-calc" x="760" y="172">—</text>
+
+        <!-- Arrow: PG→A SELECT -->
+        <path id="pgb-r2a" class="arrow-line" d="M370,112 L200,112" stroke="var(--blue)"/>
+        <polygon id="pgb-r2a-h" class="arrow-head" points="200,107 190,112 200,117" fill="var(--blue)"/>
+        <text id="pgb-r2a-l" class="arrow-label" x="285" y="105" fill="var(--blue)" text-anchor="middle">SELECT → 100</text>
+
+        <!-- Arrow: PG→B SELECT -->
+        <path id="pgb-r2b" class="arrow-line" d="M490,112 L660,112" stroke="var(--blue)"/>
+        <polygon id="pgb-r2b-h" class="arrow-head" points="660,107 670,112 660,117" fill="var(--blue)"/>
+        <text id="pgb-r2b-l" class="arrow-label" x="575" y="105" fill="var(--blue)" text-anchor="middle">SELECT → 100</text>
+
+        <!-- Arrow: A→PG UPDATE -->
+        <path id="pgb-a2r" class="arrow-line" d="M190,158 L370,158" stroke="var(--green)"/>
+        <polygon id="pgb-a2r-h" class="arrow-head" points="370,153 380,158 370,163" fill="var(--green)"/>
+        <text id="pgb-a2r-l" class="arrow-label" x="285" y="150" fill="var(--green)" text-anchor="middle">UPDATE balance=90</text>
+
+        <!-- Arrow: B→PG UPDATE (overwrite) -->
+        <path id="pgb-b2r" class="arrow-line" d="M660,158 L490,158" stroke="var(--red)"/>
+        <polygon id="pgb-b2r-h" class="arrow-head" points="490,153 480,158 490,163" fill="var(--red)"/>
+        <text id="pgb-b2r-l" class="arrow-label" x="575" y="150" fill="var(--red)" text-anchor="middle">UPDATE balance=90 ← OVERWRITE!</text>
+
+        <!-- Error annotation -->
+        <text id="pgb-err" class="inner-tag" x="430" y="215" fill="var(--red)" font-size="13" font-weight="600" text-anchor="middle">Expected: 80 · Got: 90 · Lost: 10 units</text>
+      </svg>
+    </div>
+    <div class="diagram-footer">
+      <span class="step-msg" id="msg-pg-broken">Press Play to animate the SQL race condition</span>
+      <div class="diag-btns">
+        <button class="diag-btn play" onclick="playDiagram('pg-broken')">▶ Play</button>
+        <button class="diag-btn" onclick="resetDiagram('pg-broken')">↺ Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- PG 02 · The Wrong Fix (Mutex) -->
+<section id="pg-wrong-fix" class="pg-only">
+  <div class="reveal">
+    <div class="section-label">02 · The Wrong Fix</div>
+    <h2>A mutex still only locks your own process</h2>
+    <p class="section-desc">Just like with Redis, each app process has its own mutex. Postgres is shared external state — your in-process lock has no authority over it.</p>
+  </div>
+
+  <div class="reveal reveal-delay-1 diagram-wrap">
+    <div class="diagram-header">
+      <span class="diagram-title">postgres/cmd/mutex-wrong/main.go · app-level mutex doesn’t serialize DB</span>
+      <span class="diagram-status err" id="status-pg-mutex">STILL BROKEN</span>
+    </div>
+    <div class="diagram-body">
+      <div class="step-msg bad" id="msg-pg-mutex">Two processes lock locally but still race on the same row in Postgres.</div>
+    </div>
+    <div class="diagram-footer">
+      <span class="step-msg">Run the program to see: double-spend persists despite mutex</span>
+      <div class="diag-btns">
+        <a class="diag-btn" href="#code-pg" onclick="showTab('pg-broken')">View Code →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- PG 03 · Atomic UPDATE -->
+<section id="pg-atomic-sec" class="pg-only">
+  <div class="reveal">
+    <div class="section-label">03 · Atomic UPDATE</div>
+    <h2>Push arithmetic into the database</h2>
+    <p class="section-desc">A single UPDATE statement evaluates atomically inside Postgres — no client-side race window.</p>
+  </div>
+
+  <div class="reveal reveal-delay-1 diagram-wrap">
+    <div class="diagram-header">
+      <span class="diagram-title">postgres/cmd/fixed-atomic/main.go · atomic UPDATE</span>
+      <span class="diagram-status ok" id="status-pg-atomic">CORRECT</span>
+    </div>
+    <div class="diagram-body">
+      <svg class="diag-svg" viewBox="0 0 860 220" id="svg-pg-atomic">
+        <!-- Server A -->
+        <rect class="srv-box" id="pga-a-box" x="10" y="50" width="180" height="110" rx="10"/>
+        <text class="srv-title" x="100" y="80">Server A</text>
+        <text id="pga-cmd" class="srv-val" x="100" y="105">UPDATE balance = balance - 10</text>
+        <text id="pga-res" class="srv-val ok" x="100" y="130">—</text>
+
+        <!-- Postgres -->
+        <ellipse class="pg-top" cx="430" cy="72" rx="60" ry="16"/>
+        <rect class="pg-body ok" id="pga-db" x="370" y="72" width="120" height="90" rx="0"/>
+        <ellipse style="fill:#0a1812;stroke:var(--green);stroke-width:1.5;filter:drop-shadow(0 0 6px var(--green-g))" cx="430" cy="162" rx="60" ry="16"/>
+        <text style="fill:var(--green)" class="pg-title" x="430" y="97">POSTGRES</text>
+        <text class="pg-val ok" id="pga-db-val" x="430" y="128">100</text>
+        <text class="srv-label" x="430" y="148">atomic</text>
+
+        <!-- Server B -->
+        <rect class="srv-box" id="pga-b-box" x="670" y="50" width="180" height="110" rx="10"/>
+        <text class="srv-title" x="760" y="80">Server B</text>
+        <text id="pgb-cmd2" class="srv-val" x="760" y="105">UPDATE balance = balance - 10</text>
+        <text id="pgb-res2" class="srv-val ok" x="760" y="130">—</text>
+
+        <!-- A→PG -->
+        <path id="pga-a2r" class="arrow-line" d="M190,95 L370,95" stroke="var(--green)"/>
+        <polygon id="pga-a2r-h" class="arrow-head" points="370,90 380,95 370,100" fill="var(--green)"/>
+        <text id="pga-a2r-l" class="arrow-label" x="280" y="88" fill="var(--green)" text-anchor="middle">UPDATE → 90</text>
+
+        <!-- B→PG -->
+        <path id="pga-b2r" class="arrow-line" d="M670,125 L490,125" stroke="var(--green)"/>
+        <polygon id="pga-b2r-h" class="arrow-head" points="490,120 480,125 490,130" fill="var(--green)"/>
+        <text id="pga-b2r-l" class="arrow-label" x="580" y="118" fill="var(--green)" text-anchor="middle">UPDATE → 80</text>
+
+        <text id="pga-ok" class="inner-tag" x="430" y="200" fill="var(--green)" font-size="13" font-weight="600" text-anchor="middle">Expected: 80 · Got: 80 ✓ No race possible</text>
+      </svg>
+    </div>
+    <div class="diagram-footer">
+      <span class="step-msg" id="msg-pg-atomic">Press Play to see atomic UPDATE in action</span>
+      <div class="diag-btns">
+        <button class="diag-btn play" onclick="playDiagram('pg-atomic')">▶ Play</button>
+        <button class="diag-btn" onclick="resetDiagram('pg-atomic')">↺ Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- PG 04 · SELECT FOR UPDATE -->
+<section id="pg-sfu-sec" class="pg-only">
+  <div class="reveal">
+    <div class="section-label">04 · SELECT FOR UPDATE</div>
+    <h2>Pessimistic row locks serialize writers</h2>
+    <p class="section-desc">When you must read and then decide, SELECT FOR UPDATE prevents interleaving by locking the row.</p>
+  </div>
+
+  <div class="reveal reveal-delay-1 diagram-wrap">
+    <div class="diagram-header">
+      <span class="diagram-title">postgres/cmd/fixed-select-for-update/main.go · SELECT FOR UPDATE</span>
+      <span class="diagram-status ok" id="status-pg-sfu">SERIALISED</span>
+    </div>
+    <div class="diagram-body">
+      <svg class="diag-svg" viewBox="0 0 860 250" id="svg-pg-sfu">
+        <!-- Server A -->
+        <rect class="srv-box" id="pgs-a-box" x="10" y="60" width="180" height="120" rx="10"/>
+        <text class="srv-title" x="100" y="88">Server A</text>
+        <text class="srv-label" x="100" y="110">locks row</text>
+        <text class="srv-val ok" id="pgs-a-res" x="100" y="152">—</text>
+
+        <!-- Postgres -->
+        <ellipse class="pg-top" cx="430" cy="72" rx="70" ry="18"/>
+        <rect id="pgs-db" class="pg-body ok" x="360" y="72" width="140" height="120" rx="0"/>
+        <ellipse style="fill:#0a1812;stroke:var(--green);stroke-width:1.5" cx="430" cy="192" rx="70" ry="18"/>
+        <text style="fill:var(--green)" class="pg-title" x="430" y="98">POSTGRES</text>
+        <text class="srv-label" id="pgs-lock" x="430" y="118">—</text>
+        <text class="pg-val ok" id="pgs-db-val" x="430" y="148">100</text>
+        <text class="srv-label" id="pgs-tag" x="430" y="168">balance</text>
+
+        <!-- Server B -->
+        <rect class="srv-box" id="pgs-b-box" x="670" y="60" width="180" height="120" rx="10"/>
+        <text class="srv-title" x="760" y="88">Server B</text>
+        <text class="srv-label" x="760" y="110">waits</text>
+        <text class="srv-val" id="pgs-b-res" x="760" y="152">—</text>
+
+        <!-- A→PG SELECT FOR UPDATE -->
+        <path id="pgs-a2r" class="arrow-line" d="M190,100 L358,100" stroke="var(--green)"/>
+        <polygon id="pgs-a2r-h" class="arrow-head" points="358,95 368,100 358,105" fill="var(--green)"/>
+        <text id="pgs-a2r-l" class="arrow-label" x="274" y="93" fill="var(--green)" text-anchor="middle">SELECT FOR UPDATE</text>
+
+        <!-- B→PG waits -->
+        <path id="pgs-b2r" class="arrow-line" d="M670,140 L500,140" stroke="var(--blue)"/>
+        <polygon id="pgs-b2r-h" class="arrow-head" points="500,135 490,140 500,145" fill="var(--blue)"/>
+        <text id="pgs-b2r-l" class="arrow-label" x="585" y="133" fill="var(--blue)" text-anchor="middle">waiting…</text>
+
+        <text id="pgs-ok" class="inner-tag" x="430" y="230" fill="var(--green)" font-size="13" font-weight="600" text-anchor="middle">Row lock serialises writers · No race · No overdraft</text>
+      </svg>
+    </div>
+    <div class="diagram-footer">
+      <span class="step-msg" id="msg-pg-sfu">Press Play to see row locking</span>
+      <div class="diag-btns">
+        <button class="diag-btn play" onclick="playDiagram('pg-sfu')">▶ Play</button>
+        <button class="diag-btn" onclick="resetDiagram('pg-sfu')">↺ Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- PG 05 · Optimistic Locking -->
+<section id="pg-optimistic-sec" class="pg-only">
+  <div class="reveal">
+    <div class="section-label">05 · Optimistic Locking</div>
+    <h2>Detect conflicts with a version column and retry</h2>
+    <p class="section-desc">Avoid holding locks; updates succeed only if the version matches what you read. Conflicts return 0 rows → retry.</p>
+  </div>
+
+  <div class="reveal reveal-delay-1 diagram-wrap">
+    <div class="diagram-header">
+      <span class="diagram-title">postgres/cmd/fixed-optimistic/main.go · Optimistic locking (version)</span>
+      <span class="diagram-status ok" id="status-pg-opt">CORRECT + RETRIES</span>
+    </div>
+    <div class="diagram-body">
+      <svg class="diag-svg" viewBox="0 0 860 250" id="svg-pg-optimistic">
+        <!-- Server A -->
+        <rect class="srv-box" id="pgo-a-box" x="10" y="60" width="180" height="120" rx="10"/>
+        <text class="srv-title" x="100" y="88">Server A</text>
+        <text class="srv-label" x="100" y="110">reads balance,version</text>
+        <text class="srv-val ok" id="pgo-a-res" x="100" y="152">—</text>
+
+        <!-- Postgres -->
+        <ellipse class="pg-top" cx="430" cy="72" rx="70" ry="18"/>
+        <rect id="pgo-db" class="pg-body ok" x="360" y="72" width="140" height="120" rx="0"/>
+        <ellipse style="fill:#0a1812;stroke:var(--green);stroke-width:1.5" cx="430" cy="192" rx="70" ry="18"/>
+        <text style="fill:var(--green)" class="pg-title" x="430" y="98">POSTGRES</text>
+        <text class="srv-label" id="pgo-check" x="430" y="118">—</text>
+        <text class="pg-val ok" id="pgo-db-val" x="430" y="148">500</text>
+        <text class="srv-label" id="pgo-tag" x="430" y="168">balance · version</text>
+
+        <!-- Server B -->
+        <rect class="srv-box" id="pgo-b-box" x="670" y="60" width="180" height="120" rx="10"/>
+        <text class="srv-title" x="760" y="88">Server B</text>
+        <text class="srv-label" x="760" y="110">reads balance,version</text>
+        <text class="srv-val" id="pgo-b-res" x="760" y="152">—</text>
+
+        <!-- A→PG conditional UPDATE -->
+        <path id="pgo-a2r" class="arrow-line" d="M190,100 L358,100" stroke="var(--green)"/>
+        <polygon id="pgo-a2r-h" class="arrow-head" points="358,95 368,100 358,105" fill="var(--green)"/>
+        <text id="pgo-a2r-l" class="arrow-label" x="274" y="93" fill="var(--green)" text-anchor="middle">UPDATE … WHERE version = v</text>
+
+        <!-- B→PG conditional UPDATE (mismatch) -->
+        <path id="pgo-b2r" class="arrow-line" d="M670,140 L500,140" stroke="var(--red)"/>
+        <polygon id="pgo-b2r-h" class="arrow-head" points="500,135 490,140 500,145" fill="var(--red)"/>
+        <text id="pgo-b2r-l" class="arrow-label" x="585" y="133" fill="var(--red)" text-anchor="middle">UPDATE … WHERE version = v (0 rows)</text>
+
+        <text id="pgo-ok" class="inner-tag" x="430" y="230" fill="var(--green)" font-size="13" font-weight="600" text-anchor="middle">No overdraft · Conflicts retry with fresh version</text>
+      </svg>
+    </div>
+    <div class="diagram-footer">
+      <span class="step-msg" id="msg-pg-optimistic">Press Play to see version-checked updates and retry</span>
+      <div class="diag-btns">
+        <button class="diag-btn play" onclick="playDiagram('pg-optimistic')">▶ Play</button>
+        <button class="diag-btn" onclick="resetDiagram('pg-optimistic')">↺ Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- CODE (POSTGRES) -->
+<section id="code-pg" class="pg-only">
+  <div class="reveal">
+    <div class="section-label">05 · The Code (Postgres)</div>
+    <h2>Go implementations, side by side — Postgres</h2>
+    <p class="section-desc">Four runnable programs using pgx. Each demonstrates a pattern: broken, atomic update, row lock, optimistic locking.</p>
+  </div>
+
+  <div class="reveal reveal-delay-1">
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('pg-broken')">pg-broken</div>
+      <div class="tab" onclick="showTab('pg-atomic')">pg-fixed-atomic</div>
+      <div class="tab" onclick="showTab('pg-sfu')">pg-fixed-sfu</div>
+      <div class="tab" onclick="showTab('pg-optimistic')">pg-fixed-optimistic</div>
+    </div>
+
+    <div class="code-panel active" id="tab-pg-broken">
+      <div class="code-top">
+        <span class="code-file">postgres/cmd/broken/main.go</span>
+        <span class="code-badge bad">RACE CONDITION</span>
+      </div>
+      <pre><code class="language-go">// Non-atomic SELECT + UPDATE — triggers race condition
+func main() {
+    ctx := context.Background()
+    pool, _ := db.Connect(ctx)
+    defer pool.Close()
+    db.Seed(ctx, pool, 2000)
+
+    var wg sync.WaitGroup
+    for i := 0; i &lt; 100; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            var balance int
+            pool.QueryRow(ctx, "SELECT balance FROM accounts WHERE id = 1").Scan(&balance)
+            time.Sleep(time.Millisecond)
+            pool.Exec(ctx, "UPDATE accounts SET balance = $1 WHERE id = 1", balance-10)
+        }()
+    }
+    wg.Wait()
+}</code></pre>
+    </div>
+
+    <div class="code-panel" id="tab-pg-atomic">
+      <div class="code-top">
+        <span class="code-file">postgres/cmd/fixed-atomic/main.go</span>
+        <span class="code-badge good">CORRECT</span>
+      </div>
+      <pre><code class="language-go">// Single atomic UPDATE — database does read/compute/write internally
+pool.Exec(ctx,
+  "UPDATE accounts SET balance = balance - $1 WHERE id = 1 AND balance &gt;= $1",
+  10,
+)</code></pre>
+    </div>
+
+    <div class="code-panel" id="tab-pg-sfu">
+      <div class="code-top">
+        <span class="code-file">postgres/cmd/fixed-select-for-update/main.go</span>
+        <span class="code-badge good">SERIALISED</span>
+      </div>
+      <pre><code class="language-go">tx, _ := pool.BeginTx(ctx, pgx.TxOptions{})
+defer tx.Rollback(ctx)
+var balance int
+tx.QueryRow(ctx, "SELECT balance FROM accounts WHERE id = 1 FOR UPDATE").Scan(&balance)
+if balance &lt; 10 { return }
+tx.Exec(ctx, "UPDATE accounts SET balance = $1 WHERE id = 1", balance-10)
+tx.Commit(ctx)</code></pre>
+    </div>
+
+    <div class="code-panel" id="tab-pg-optimistic">
+      <div class="code-top">
+        <span class="code-file">postgres/cmd/fixed-optimistic/main.go</span>
+        <span class="code-badge good">CORRECT + RETRIES</span>
+      </div>
+      <pre><code class="language-go">var balance, version int
+pool.QueryRow(ctx, "SELECT balance, version FROM accounts WHERE id = 1").Scan(&balance, &version)
+if balance &lt; 10 { return }
+tag, _ := pool.Exec(ctx, `UPDATE accounts SET balance=$1, version=$2 WHERE id=1 AND version=$3`, balance-10, version+1, version)
+if tag.RowsAffected() == 0 { /* retry with fresh read */ }</code></pre>
+    </div>
+  </div>
+</section>
+<hr class="sep">
+
 <!-- WRONG FIX -->
-<section id="wrong-fix">
+<section id="wrong-fix" class="redis-only">
   <div class="reveal">
     <div class="section-label">02 · The Wrong Fix</div>
     <h2>A Mutex only locks your own memory</h2>
@@ -403,7 +805,7 @@ footer a{color:var(--blue);text-decoration:none}
 <hr class="sep">
 
 <!-- FIX 1: DECRBY -->
-<section id="decrby">
+<section id="decrby" class="redis-only">
   <div class="reveal">
     <div class="section-label">03 · The Right Fix</div>
     <h2>Push the arithmetic into Redis</h2>
@@ -472,7 +874,7 @@ footer a{color:var(--blue);text-decoration:none}
 <hr class="sep">
 
 <!-- FIX 2: LUA -->
-<section id="lua">
+<section id="lua" class="redis-only">
   <div class="reveal">
     <div class="section-label">04 · Advanced Fix</div>
     <h2>Lua scripts: conditional atomicity</h2>
@@ -545,7 +947,7 @@ footer a{color:var(--blue);text-decoration:none}
 <hr class="sep">
 
 <!-- PRINCIPLES -->
-<section id="principles">
+<section id="principles" class="redis-only">
   <div class="reveal">
     <div class="section-label">05 · Key Principles</div>
     <h2>Staff-level thinking on distributed money</h2>
@@ -578,7 +980,7 @@ footer a{color:var(--blue);text-decoration:none}
 <hr class="sep">
 
 <!-- CODE -->
-<section id="code">
+<section id="code" class="redis-only">
   <div class="reveal">
     <div class="section-label">06 · The Code</div>
     <h2>Go implementations, side by side</h2>
@@ -764,6 +1166,66 @@ func main() {
 <script>
 hljs.highlightAll();
 
+// ── BACKEND TOGGLE ─────────────────────────────────────
+document.body.classList.add('backend-redis');
+const btWrap = document.getElementById('backend-toggle');
+if (btWrap) {
+  btWrap.addEventListener('click', (e) => {
+    const btn = e.target.closest('.bt');
+    if (!btn) return;
+    const backend = btn.getAttribute('data-backend');
+    if (!backend) return;
+    // set active button
+    btWrap.querySelectorAll('.bt').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // swap classes on body
+    document.body.classList.remove('backend-redis','backend-postgres');
+    document.body.classList.add(backend === 'postgres' ? 'backend-postgres' : 'backend-redis');
+
+    // Renumber Postgres section labels and remap navbar anchors
+    const nav = document.querySelector('nav .nav-links');
+    if (nav) {
+      const links = nav.querySelectorAll('a');
+      if (backend === 'postgres') {
+        // renumber labels (already 01–05 in markup); set Code to 06
+        const codePgLbl = document.querySelector('#code-pg .section-label');
+        if (codePgLbl) codePgLbl.textContent = '06 · The Code (Postgres)';
+        // map anchors to Postgres sections
+        const map = ['#pg-problem','#pg-wrong-fix','#pg-atomic-sec','#pg-sfu-sec','#pg-optimistic-sec','#code-pg'];
+        links.forEach((a, i) => { if (map[i]) a.setAttribute('href', map[i]); });
+      } else {
+        // restore redis numbering label for code
+        const codePgLbl = document.querySelector('#code-pg .section-label');
+        if (codePgLbl) codePgLbl.textContent = '05 · The Code (Postgres)';
+        // restore anchors to Redis sections
+        const map = ['#problem','#wrong-fix','#decrby','#lua','#principles','#code'];
+        links.forEach((a, i) => { if (map[i]) a.setAttribute('href', map[i]); });
+      }
+    }
+
+    // Update hero copy based on backend with a small transition
+    const heroBadge = document.querySelector('.hero-badge');
+    const heroSub = document.querySelector('.hero-sub');
+    const heroH1 = document.querySelector('h1.glitch');
+    const dbEmoji = document.getElementById('db-emoji');
+    [heroBadge, heroSub, heroH1, dbEmoji].forEach(el => el && el.classList.add('switching'));
+    setTimeout(() => {
+      if (backend === 'postgres') {
+        if (heroBadge) heroBadge.innerHTML = '<span></span>DISTRIBUTED SYSTEMS · POSTGRES · RACE CONDITIONS';
+        if (heroSub) heroSub.textContent = 'Two transactions. One Postgres row. A race condition that silently corrupts your balances — and the database-native fixes.';
+        if (heroH1) heroH1.innerHTML = 'THE <em>DOUBLE-SPENDING</em> PROBLEM — POSTGRES ' + (dbEmoji ? dbEmoji.outerHTML : '');
+        if (dbEmoji) { dbEmoji.textContent = '🐘'; dbEmoji.className = 'db-icon pg'; }
+      } else {
+        if (heroBadge) heroBadge.innerHTML = '<span></span>DISTRIBUTED SYSTEMS · REDIS · RACE CONDITIONS';
+        if (heroSub) heroSub.textContent = "Two servers. One Redis. A race condition that silently corrupts your balances — and why a Mutex won't save you.";
+        if (heroH1) heroH1.innerHTML = 'THE <em>DOUBLE-SPENDING</em> PROBLEM ' + (dbEmoji ? dbEmoji.outerHTML : '');
+        if (dbEmoji) { dbEmoji.textContent = '🟥'; dbEmoji.className = 'db-icon redis'; }
+      }
+      [heroBadge, heroSub, heroH1, dbEmoji].forEach(el => el && el.classList.remove('switching'));
+    }, 60);
+  });
+}
+
 // ── HERO CANVAS ──────────────────────────────────────────
 const canvas = document.getElementById('hero-canvas');
 const ctx2 = canvas.getContext('2d');
@@ -875,7 +1337,7 @@ function setMsg(id, msg, cls) {
 }
 
 // ── DIAGRAM ENGINES ────────────────────────────────────
-const diagTimers = { broken: [], mutex: [], decrby: [], lua: [] };
+const diagTimers = { broken: [], mutex: [], decrby: [], lua: [], 'pg-broken': [], 'pg-atomic': [], 'pg-sfu': [], 'pg-optimistic': [] };
 
 function resetDiagram(name) {
   (diagTimers[name] || []).forEach(clearTimeout);
@@ -884,6 +1346,10 @@ function resetDiagram(name) {
   if (name === 'mutex')  resetMutex();
   if (name === 'decrby') resetDecrby();
   if (name === 'lua')    resetLua();
+  if (name === 'pg-broken') resetPgBroken();
+  if (name === 'pg-atomic') resetPgAtomic();
+  if (name === 'pg-sfu')    resetPgSfu();
+  if (name === 'pg-optimistic') resetPgOptimistic();
 }
 
 // ── BROKEN ────────────────────────────────────────────
@@ -905,6 +1371,10 @@ function playDiagram(name) {
   if (name === 'mutex')  animateMutex();
   if (name === 'decrby') animateDecrby();
   if (name === 'lua')    animateLua();
+  if (name === 'pg-broken') animatePgBroken();
+  if (name === 'pg-atomic') animatePgAtomic();
+  if (name === 'pg-sfu')    animatePgSfu();
+  if (name === 'pg-optimistic') animatePgOptimistic();
 }
 
 function animateBroken() {
@@ -1071,16 +1541,121 @@ function animateLua() {
   });
 }
 
+// ── PG: BROKEN ─────────────────────────────────────────
+function resetPgBroken() {
+  ['pgb-r2a','pgb-r2b','pgb-a2r','pgb-b2r'].forEach(hideArrow);
+  hideEl('pgb-err');
+  setText('pgb-sa-val','—'); setText('pgb-sa-calc','—');
+  setText('pgb-sb-val','—'); setText('pgb-sb-calc','—');
+  setText('pgb-db-val','100');
+  svgCls('pgb-db','pg-body');
+  svgCls('pgb-sa-box','srv-box');
+  svgCls('pgb-sb-box','srv-box');
+  setMsg('msg-pg-broken','Press Play to animate the SQL race condition');
+}
+
+function animatePgBroken() {
+  const t = (ms, fn) => diagTimers['pg-broken'].push(setTimeout(fn, ms));
+  setMsg('msg-pg-broken','Both servers SELECT the same balance…');
+  t(200, () => showArrow('pgb-r2a'));
+  t(400, () => showArrow('pgb-r2b'));
+  t(800, () => {
+    setText('pgb-sa-val','100');
+    setText('pgb-sb-val','100');
+    setMsg('msg-pg-broken','Both got 100 — now computing locally…');
+  });
+  t(1400, () => {
+    setText('pgb-sa-calc','100 − 10 = 90');
+    setText('pgb-sb-calc','100 − 10 = 90');
+    svgCls('pgb-sa-box','srv-box active');
+    svgCls('pgb-sb-box','srv-box active');
+  });
+  t(2200, () => { setMsg('msg-pg-broken','Server A writes UPDATE…'); showArrow('pgb-a2r'); });
+  t(2800, () => { setText('pgb-db-val','90'); svgCls('pgb-db','pg-body ok'); });
+  t(3200, () => { setMsg('msg-pg-broken','Server B overwrites with stale value!', 'bad'); showArrow('pgb-b2r'); });
+  t(3800, () => {
+    setText('pgb-db-val','90','err');
+    svgCls('pgb-db','pg-body err');
+    svgCls('pgb-sa-box','srv-box err');
+    svgCls('pgb-sb-box','srv-box err');
+    showEl('pgb-err');
+    setMsg('msg-pg-broken','Expected 80. Got 90. 10 units double-spent.', 'bad');
+  });
+}
+
+// ── PG: ATOMIC UPDATE ─────────────────────────────────
+function resetPgAtomic() {
+  ['pga-a2r','pga-b2r'].forEach(hideArrow);
+  hideEl('pga-ok');
+  setText('pga-res','—'); setText('pgb-res2','—');
+  setText('pga-db-val','100');
+  svgCls('pga-a-box','srv-box');
+  svgCls('pga-b-box','srv-box');
+  setMsg('msg-pg-atomic','Press Play to see atomic UPDATE in action');
+}
+
+function animatePgAtomic() {
+  const t = (ms, fn) => diagTimers['pg-atomic'].push(setTimeout(fn, ms));
+  setMsg('msg-pg-atomic','Server A issues one atomic UPDATE…');
+  t(300, () => { svgCls('pga-a-box','srv-box ok'); showArrow('pga-a2r'); });
+  t(900, () => { setText('pga-db-val','90'); setText('pga-res','← new balance: 90'); setMsg('msg-pg-atomic','Postgres applied UPDATE atomically. Now Server B…'); });
+  t(1600, () => { svgCls('pga-b-box','srv-box ok'); showArrow('pga-b2r'); });
+  t(2200, () => { setText('pga-db-val','80'); setText('pgb-res2','← new balance: 80'); showEl('pga-ok'); setMsg('msg-pg-atomic','Balance = 80. Correct. No race.', 'good'); });
+}
+
+// ── PG: SELECT FOR UPDATE ─────────────────────────────
+function resetPgSfu() {
+  ['pgs-a2r','pgs-b2r'].forEach(hideArrow);
+  hideEl('pgs-ok');
+  setText('pgs-a-res','—'); setText('pgs-b-res','—');
+  setText('pgs-db-val','100');
+  setText('pgs-lock','—');
+  svgCls('pgs-a-box','srv-box');
+  svgCls('pgs-b-box','srv-box');
+  svgCls('pgs-db','pg-body ok');
+  setMsg('msg-pg-sfu','Press Play to see row locking');
+}
+
+function animatePgSfu() {
+  const t = (ms, fn) => diagTimers['pg-sfu'].push(setTimeout(fn, ms));
+  setMsg('msg-pg-sfu','Server A locks row with SELECT FOR UPDATE…');
+  t(300, () => { svgCls('pgs-a-box','srv-box ok'); showArrow('pgs-a2r'); setText('pgs-lock','row locked'); });
+  t(900, () => { setText('pgs-db-val','90'); setText('pgs-a-res','← 90'); setMsg('msg-pg-sfu','Server B waits until A commits…'); showArrow('pgs-b2r'); });
+  t(1800, () => { svgCls('pgs-b-box','srv-box ok'); setText('pgs-db-val','80'); setText('pgs-b-res','← 80'); showEl('pgs-ok'); setMsg('msg-pg-sfu','Writers serialised. No race.', 'good'); });
+}
+
+// ── PG: OPTIMISTIC LOCKING ────────────────────────────
+function resetPgOptimistic() {
+  ['pgo-a2r','pgo-b2r'].forEach(hideArrow);
+  hideEl('pgo-ok');
+  setText('pgo-a-res','—'); setText('pgo-b-res','—');
+  setText('pgo-db-val','500');
+  setText('pgo-check','—');
+  svgCls('pgo-a-box','srv-box');
+  svgCls('pgo-b-box','srv-box');
+  svgCls('pgo-db','pg-body ok');
+  setMsg('msg-pg-optimistic','Press Play to see version-checked updates and retry');
+}
+
+function animatePgOptimistic() {
+  const t = (ms, fn) => diagTimers['pg-optimistic'].push(setTimeout(fn, ms));
+  setMsg('msg-pg-optimistic','Server A reads (balance,version) and updates if version matches…');
+  t(300, () => { svgCls('pgo-a-box','srv-box ok'); showArrow('pgo-a2r'); });
+  t(900, () => { setText('pgo-check','500 ≥ 10 ✓ version=v → update'); setText('pgo-db-val','490'); setText('pgo-a-res','← 490'); setMsg('msg-pg-optimistic','Server B tries with stale version…'); });
+  t(1600, () => { setText('pgo-db-val','0'); setText('pgo-check','checking version…'); });
+  t(2200, () => { svgCls('pgo-b-box','srv-box err'); showArrow('pgo-b2r'); });
+  t(2800, () => { setText('pgo-check','version mismatch ✗ 0 rows'); setText('pgo-b-res','← RETRY','err'); svgCls('pgo-db','pg-body ok'); showEl('pgo-ok'); setMsg('msg-pg-optimistic','No overdraft. Conflicts detected and retried.', 'good'); });
+}
+
 // ── TABS ─────────────────────────────────────────────
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.code-panel').forEach(p => p.classList.remove('active'));
-  const map = { broken:'tab-broken', mutex:'tab-mutex', incrby:'tab-incrby', 'lua-code':'tab-lua-code' };
-  const tabs = ['broken','mutex','incrby','lua-code'];
-  tabs.forEach((t, i) => {
-    if (t === name) document.querySelectorAll('.tab')[i].classList.add('active');
-  });
-  document.getElementById(map[name]).classList.add('active');
+  const map = { broken:'tab-broken', mutex:'tab-mutex', incrby:'tab-incrby', 'lua-code':'tab-lua-code', 'pg-broken':'tab-pg-broken', 'pg-atomic':'tab-pg-atomic', 'pg-sfu':'tab-pg-sfu', 'pg-optimistic':'tab-pg-optimistic' };
+  const panel = document.getElementById(map[name]);
+  if (panel) panel.classList.add('active');
+  const tabEl = document.querySelector(`.tab[onclick="showTab('${name}')"]`);
+  if (tabEl) tabEl.classList.add('active');
 }
 
 // Auto-play diagrams when scrolled into view
@@ -1092,11 +1667,15 @@ const diagObs = new IntersectionObserver(entries => {
       if (id === 'svg-mutex')  playDiagram('mutex');
       if (id === 'svg-decrby') playDiagram('decrby');
       if (id === 'svg-lua')    playDiagram('lua');
+      if (id === 'svg-pg-broken') playDiagram('pg-broken');
+      if (id === 'svg-pg-atomic') playDiagram('pg-atomic');
+      if (id === 'svg-pg-sfu')    playDiagram('pg-sfu');
+      if (id === 'svg-pg-optimistic') playDiagram('pg-optimistic');
       diagObs.unobserve(e.target);
     }
   });
 }, { threshold: 0.4 });
-['svg-broken','svg-mutex','svg-decrby','svg-lua'].forEach(id => {
+['svg-broken','svg-mutex','svg-decrby','svg-lua','svg-pg-broken','svg-pg-atomic','svg-pg-sfu','svg-pg-optimistic'].forEach(id => {
   const el = document.getElementById(id);
   if (el) diagObs.observe(el);
 });
