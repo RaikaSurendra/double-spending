@@ -862,10 +862,11 @@ function setMsg(id, msg, cls) {
 }
 
 // ── DIAGRAM ENGINES ────────────────────────────────────
-const diagTimers = {};
+const diagTimers = { broken: [], mutex: [], decrby: [], lua: [] };
 
 function resetDiagram(name) {
-  clearTimeout(diagTimers[name]);
+  (diagTimers[name] || []).forEach(clearTimeout);
+  diagTimers[name] = [];
   if (name === 'broken') resetBroken();
   if (name === 'mutex')  resetMutex();
   if (name === 'decrby') resetDecrby();
@@ -894,7 +895,7 @@ function playDiagram(name) {
 }
 
 function animateBroken() {
-  const t = (ms, fn) => { diagTimers['broken'] = setTimeout(fn, ms); };
+  const t = (ms, fn) => diagTimers['broken'].push(setTimeout(fn, ms));
   setMsg('msg-broken','Both servers reading balance simultaneously…');
   t(200, () => showArrow('b-r2a'));
   t(400, () => showArrow('b-r2b'));
@@ -944,7 +945,7 @@ function resetMutex() {
 }
 
 function animateMutex() {
-  const t = (ms, fn) => { diagTimers['mutex'] = setTimeout(fn, ms); };
+  const t = (ms, fn) => diagTimers['mutex'].push(setTimeout(fn, ms));
   setMsg('msg-mutex','Each server acquires its own private mutex…');
   t(300, () => {
     document.getElementById('ma-box').className = 'srv-box active';
@@ -991,7 +992,7 @@ function resetDecrby() {
 }
 
 function animateDecrby() {
-  const t = (ms, fn) => { diagTimers['decrby'] = setTimeout(fn, ms); };
+  const t = (ms, fn) => diagTimers['decrby'].push(setTimeout(fn, ms));
   setMsg('msg-decrby','Server A sends DECRBY — one atomic instruction…');
   t(300, () => {
     document.getElementById('da-box').className = 'srv-box ok';
@@ -1028,7 +1029,7 @@ function resetLua() {
 }
 
 function animateLua() {
-  const t = (ms, fn) => { diagTimers['lua'] = setTimeout(fn, ms); };
+  const t = (ms, fn) => diagTimers['lua'].push(setTimeout(fn, ms));
   setMsg('msg-lua','Server A sends EVAL — Lua runs entirely inside Redis…');
   t(300, () => {
     document.getElementById('la-box').className = 'srv-box ok';
